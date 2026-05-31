@@ -52,3 +52,4 @@ The quantum circuit uses `StronglyEntanglingLayers` from PennyLane — parameter
 - Side-by-side convergence plot makes the quantum advantage concrete and measurable
 # quantum-grid
 # quantum-grid
+# quantum-grid
