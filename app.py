@@ -13,7 +13,7 @@ from classical_agent import ClassicalAgent
 
 st.set_page_config(page_title="Quantum Grid RL", page_icon="⚡", layout="wide")
 
-st.title("⚡ Quantum-Enhanced RL for Grid Optimization")
+st.title("Grid Optimization using Quantum Enhanced Reinforcement Learning")
 st.caption("A Variational Quantum Circuit agent vs a Classical Q-table agent managing an electric grid.")
 
 with st.sidebar:
