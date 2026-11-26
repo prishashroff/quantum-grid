@@ -16,6 +16,12 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
+# Difficulty settings (tuned with check_env.py so a random policy blacks out
+# roughly 15-30% of steps; the original values gave ~0.3%).
+WIND_LOW, WIND_HIGH = 0.0, 0.6      # original: 0.1, 0.9
+DEMAND_BASE         = 0.9           # original: 0.5
+SOLAR_SCALE         = 0.3           # original: 1.0 (peak solar output)
+
 
 class GridEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
@@ -34,10 +40,10 @@ class GridEnv(gym.Env):
 
     def _get_obs(self):
         hour = (self.step_count % 24) / 24.0
-        solar = float(np.clip(np.sin(hour * np.pi) + self.rng.normal(0, 0.05), 0, 1))
-        wind  = float(np.clip(self.rng.uniform(0.1, 0.9) + self.rng.normal(0, 0.08), 0, 1))
+        solar = float(np.clip(SOLAR_SCALE * np.sin(hour * np.pi) + self.rng.normal(0, 0.05), 0, 1))
+        wind  = float(np.clip(self.rng.uniform(WIND_LOW, WIND_HIGH) + self.rng.normal(0, 0.08), 0, 1))
         gas   = float(np.clip(self.gas_level + self.rng.normal(0, 0.02), 0, 1))
-        demand= float(np.clip(0.5 + 0.3 * np.sin(hour * np.pi * 2) + self.rng.normal(0, 0.05), 0.1, 1))
+        demand= float(np.clip(DEMAND_BASE + 0.3 * np.sin(hour * np.pi * 2) + self.rng.normal(0, 0.05), 0.1, 1))
         return np.array([solar, wind, gas, demand], dtype=np.float32)
 
     def reset(self, seed=None, options=None):
@@ -51,8 +57,7 @@ class GridEnv(gym.Env):
         return obs, {}
 
     def step(self, action):
-        obs = self._get_obs()
-        solar, wind, gas, demand = obs
+        solar, wind, gas, demand = self._last_obs   # the state the agent acted on
         supply = solar + wind + gas * 0.6     # gas is partial contributor
 
         reward = 0.0
@@ -85,6 +90,7 @@ class GridEnv(gym.Env):
             info["blackout"] = True
 
         self.step_count += 1
+        obs = self._get_obs()                 # NEXT state, returned to the agent
         self._last_obs = obs
         terminated = self.step_count >= self.max_steps
         return obs, reward, terminated, False, info

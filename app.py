@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from grid_env import GridEnv
 from vqc_agent import VQCAgent
 from classical_agent import ClassicalAgent
+from train import REWARD_SCALE
 
 st.set_page_config(page_title="Quantum Grid RL", page_icon="⚡", layout="wide")
 
@@ -75,7 +76,7 @@ if run_btn:
         while not done:
             a = q_agent.act(obs)
             n, r, term, trunc, _ = env.step(a)
-            q_agent.train_step(obs, a, r, n, term or trunc)
+            q_agent.train_step(obs, a, r * REWARD_SCALE, n, term or trunc)
             obs = n; done = term or trunc
         q_bl = env.blackouts; q_agent.decay_epsilon()
 
@@ -84,7 +85,7 @@ if run_btn:
         while not done:
             a = c_agent.act(obs)
             n, r, term, trunc, _ = env.step(a)
-            c_agent.train_step(obs, a, r, n, term or trunc)
+            c_agent.train_step(obs, a, r * REWARD_SCALE, n, term or trunc)
             obs = n; done = term or trunc
         c_bl = env.blackouts; c_agent.decay_epsilon()
 

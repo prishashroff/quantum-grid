@@ -24,7 +24,7 @@ class ClassicalAgent:
     def __init__(
         self,
         lr: float = 0.1,
-        gamma: float = 0.95,
+        gamma: float = 0.9,
         epsilon: float = 1.0,
         epsilon_min: float = 0.05,
         epsilon_decay: float = 0.97,
