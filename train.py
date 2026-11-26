@@ -10,8 +10,9 @@ from grid_env import GridEnv
 from vqc_agent import VQCAgent
 from classical_agent import ClassicalAgent
 
-EPISODES  = 60
+EPISODES  = 150     # 0.97**150 < 0.05, so epsilon reaches its floor
 SEED      = 42
+REWARD_SCALE = 1 / 5   # applied to both agents; keeps targets within the VQC's [-5, 5] range
 
 
 def run_episode(env, agent, train=True):
@@ -23,7 +24,7 @@ def run_episode(env, agent, train=True):
         next_obs, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
         if train:
-            agent.train_step(obs, action, reward, next_obs, done)
+            agent.train_step(obs, action, reward * REWARD_SCALE, next_obs, done)
         obs = next_obs
         total_reward += reward
     if train:

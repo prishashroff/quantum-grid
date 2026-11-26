@@ -1,83 +1,82 @@
 """
-plot.py — Visualize training results from results.npz
+plot.py — Charts from experiment.npz (produced by experiment.py)
 
 Run:  python plot.py
-Requires: matplotlib, numpy
+Outputs: results.png  (a) mean blackout rate per agent, 95% CI error bars
+                      (b) learning curve for the learned agents, 95% CI bands
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 from pathlib import Path
 
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
-def smooth(data, window=5):
-    """Moving average smoothing."""
-    kernel = np.ones(window) / window
-    return np.convolve(data, kernel, mode="same")
+INK, INK_2, GRID = "#0b0b0b", "#52514e", "#e4e3df"
+COLORS = {"Quantum (VQC)": "#2a78d6", "Classical (Q-table)": "#eb6834"}
+BASELINE = "#a3a29c"
 
 
-def plot_results(npz_path="results.npz"):
-    if not Path(npz_path).exists():
-        print("results.npz not found — run  python train.py  first.")
+def ci95(x, axis=0):
+    return 1.96 * x.std(axis=axis, ddof=1) / np.sqrt(x.shape[axis])
+
+
+def style(ax):
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(GRID)
+    ax.tick_params(colors=INK_2, labelsize=9)
+    ax.yaxis.grid(True, color=GRID, linewidth=0.8)
+    ax.set_axisbelow(True)
+
+
+def plot_results(path="experiment.npz"):
+    if not Path(path).exists():
+        print(f"{path} not found — run  python experiment.py  first.")
         return
+    d = np.load(path)
+    rates, curves = d["rates"] * 100, d["curves"] * 100
+    agents, learned = list(d["agents"]), list(d["learned"])
+    every, n = int(d["curve_every"]), rates.shape[0]
 
-    data = np.load(npz_path)
-    q_bl = data["q_blackouts"]
-    c_bl = data["c_blackouts"]
-    eps  = np.arange(1, len(q_bl) + 1)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
+    fig.patch.set_facecolor("white")
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-    fig.suptitle("Quantum vs Classical RL — Electric Grid Optimization", fontsize=14, fontweight="bold")
+    # (a) bar chart
+    mean, err = rates.mean(0), ci95(rates)
+    colors = [COLORS.get(a, BASELINE) for a in agents]
+    x = np.arange(len(agents))
+    ax1.bar(x, mean, color=colors, width=0.6, edgecolor="white", linewidth=2)
+    ax1.errorbar(x, mean, yerr=err, fmt="none", ecolor=INK, elinewidth=1.2, capsize=4)
+    for xi, m, e in zip(x, mean, err):
+        ax1.text(xi, m + e + 0.4, f"{m:.1f}%", ha="center", va="bottom", fontsize=9, color=INK)
+    ax1.set_xticks(x, [a.replace(" (", "\n(") for a in agents])
+    ax1.set_ylabel("Blackout rate (% of steps)", color=INK_2)
+    ax1.set_title(f"(a) Greedy evaluation, mean ± 95% CI ({n} seeds)", loc="left", fontsize=11, color=INK)
+    style(ax1)
 
-    # 1. Raw blackouts
-    ax = axes[0, 0]
-    ax.plot(eps, q_bl, color="#185FA5", alpha=0.4, linewidth=1, label="Quantum (raw)")
-    ax.plot(eps, c_bl, color="#3B6D11", alpha=0.4, linewidth=1, label="Classical (raw)")
-    ax.plot(eps, smooth(q_bl), color="#185FA5", linewidth=2.5, label="Quantum (smoothed)")
-    ax.plot(eps, smooth(c_bl), color="#3B6D11", linewidth=2.5, linestyle="--", label="Classical (smoothed)")
-    ax.set_title("Blackouts per Episode (Learning Curve)")
-    ax.set_xlabel("Episode"); ax.set_ylabel("Blackouts")
-    ax.legend(fontsize=9); ax.grid(alpha=0.3)
+    # (b) learning curves
+    eps = np.arange(curves.shape[2]) * every
+    for i, name in enumerate(learned):
+        m, e = curves[:, i].mean(0), ci95(curves[:, i])
+        ax2.plot(eps, m, color=COLORS[name], linewidth=2, label=name)
+        ax2.fill_between(eps, m - e, m + e, color=COLORS[name], alpha=0.18, linewidth=0)
+    for name in ("Rule-based", "Random"):
+        j = agents.index(name)
+        ax2.axhline(rates[:, j].mean(), color=BASELINE, linewidth=1, linestyle="--")
+        ax2.text(2, rates[:, j].mean() + 0.4, f"{name} baseline", color=INK_2, fontsize=9, va="bottom")
+    ax2.set_xlim(0, eps[-1])
+    ax2.set_xlabel("Training episodes", color=INK_2)
+    ax2.set_ylabel("Blackout rate (% of steps)", color=INK_2)
+    ax2.set_title("(b) Learning curve, greedy eval every 10 episodes", loc="left", fontsize=11, color=INK)
+    ax2.legend(frameon=False, fontsize=9, loc="upper right")
+    style(ax2)
 
-    # 2. Cumulative blackouts
-    ax = axes[0, 1]
-    ax.plot(eps, np.cumsum(q_bl), color="#185FA5", linewidth=2.5, label="Quantum cumulative")
-    ax.plot(eps, np.cumsum(c_bl), color="#3B6D11", linewidth=2.5, linestyle="--", label="Classical cumulative")
-    ax.fill_between(eps, np.cumsum(q_bl), np.cumsum(c_bl), alpha=0.15, color="#1D9E75", label="Quantum advantage")
-    ax.set_title("Cumulative Blackouts")
-    ax.set_xlabel("Episode"); ax.set_ylabel("Total blackouts")
-    ax.legend(fontsize=9); ax.grid(alpha=0.3)
-
-    # 3. Advantage per episode
-    ax = axes[1, 0]
-    advantage = np.array(c_bl) - np.array(q_bl)
-    colors = ["#185FA5" if v >= 0 else "#E24B4A" for v in advantage]
-    ax.bar(eps, advantage, color=colors, alpha=0.7, width=0.8)
-    ax.axhline(0, color="black", linewidth=0.8)
-    ax.set_title("Per-Episode Advantage (positive = quantum wins)")
-    ax.set_xlabel("Episode"); ax.set_ylabel("Classical – Quantum blackouts")
-    ax.grid(alpha=0.3, axis="y")
-
-    # 4. Summary bar
-    ax = axes[1, 1]
-    totals  = [sum(q_bl), sum(c_bl)]
-    labels  = ["Quantum\n(VQC)", "Classical\n(Q-table)"]
-    bar_colors = ["#185FA5", "#3B6D11"]
-    bars = ax.bar(labels, totals, color=bar_colors, width=0.5, alpha=0.85)
-    for bar, val in zip(bars, totals):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
-                str(val), ha="center", va="bottom", fontweight="bold")
-    savings = totals[1] - totals[0]
-    pct = savings / totals[1] * 100 if totals[1] > 0 else 0
-    ax.set_title(f"Total Blackouts — Quantum saves {savings} ({pct:.1f}%)")
-    ax.set_ylabel("Total blackouts across all episodes")
-    ax.grid(alpha=0.3, axis="y")
-
-    plt.tight_layout()
-    plt.savefig("results.png", dpi=150, bbox_inches="tight")
+    fig.tight_layout()
+    fig.savefig("results.png", dpi=150, bbox_inches="tight")
     print("Chart saved to results.png")
-    plt.show()
 
 
 if __name__ == "__main__":

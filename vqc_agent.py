@@ -13,6 +13,7 @@ N_QUBITS  = 5
 N_LAYERS  = 2
 N_ACTIONS = 5
 N_OBS     = 4
+Q_SCALE   = 5.0     # Pauli-Z expvals lie in [-1, 1]; scale so Q-values span [-5, 5]
 
 dev = qml.device("default.qubit", wires=N_QUBITS)
 
@@ -29,7 +30,7 @@ class VQCAgent:
     def __init__(
         self,
         lr: float = 0.02,
-        gamma: float = 0.95,
+        gamma: float = 0.9,
         epsilon: float = 1.0,
         epsilon_min: float = 0.05,
         epsilon_decay: float = 0.97,
@@ -47,7 +48,7 @@ class VQCAgent:
 
     def q_values(self, state):
         raw = vqc(pnp.array(state, requires_grad=False), self.weights)
-        return np.array(raw, dtype=float)
+        return Q_SCALE * np.array(raw, dtype=float)
 
     def act(self, state):
         if np.random.random() < self.epsilon:
@@ -59,15 +60,12 @@ class VQCAgent:
         if done:
             target = float(reward)
         else:
-            next_qs = np.array(
-                vqc(pnp.array(next_state, requires_grad=False), self.weights),
-                dtype=float
-            )
+            next_qs = self.q_values(next_state)
             target = float(reward) + self.gamma * float(np.max(next_qs))
 
         def loss_fn(weights):
             qs = vqc(pnp.array(state, requires_grad=False), weights)
-            return (qs[action] - target) ** 2
+            return (Q_SCALE * qs[action] - target) ** 2
 
         # This version of PennyLane's AdamOptimizer.step() returns just
         # the updated weights (not a 3-tuple) — assign directly

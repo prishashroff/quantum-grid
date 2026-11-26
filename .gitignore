@@ -8,3 +8,5 @@ venv/
 *.egg-info/
 dist/
 .DS_Store
+!results.png
+experiment_log.txt
